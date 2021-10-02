@@ -1,6 +1,6 @@
 namespace: "ntheule_lab"
 name: "general"
-version: "1.0"
+version: "1.0.0"
 readme: "readme.md"
 authors:
     - "Nathan Theule"
