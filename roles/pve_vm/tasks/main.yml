@@ -1,0 +1,77 @@
+---
+
+- name: Create VM
+  community.general.proxmox_kvm:
+    api_user: "{{ pve_user }}"
+    api_password: "{{ pve_password }}"
+    api_host: "{{ pve_host }}"
+    name: "{{ vm_name }}"
+    node: "{{ pve_node }}"
+    clone: "{{ pve_template }}"
+    storage: "{{ pve_storage }}"
+  delegate_to: localhost
+  throttle: 1
+
+# Sleep because without it, the update task occasionally errors out because the vmid does not yet exist
+- name: Sleep for 5 seconds
+  ansible.builtin.wait_for:
+    timeout: 5
+  delegate_to: localhost  
+
+# Needs to be done because the previous task will only clone the VM and won't change settings
+- name: Update VM settings
+  community.general.proxmox_kvm:
+    api_user: "{{ pve_user }}"
+    api_password: "{{ pve_password }}"
+    api_host: "{{ pve_host }}"
+    name: "{{ vm_name }}"
+    node: "{{ pve_node }}"
+    update: yes
+    cores: "{{ vm_cores }}"
+    vcpus: "{{ vm_vcpus }}"
+    memory: "{{ vm_memory }}"
+    ipconfig: "{{ vm_ipconfig }}"
+    cipassword: "{{ vm_password }}"
+    ciuser: "{{ vm_user }}"
+    sshkeys: "{{ vm_ssh_key }}"
+    vga: "{{ vm_vga }}"
+  delegate_to: localhost
+  register: vm
+
+# Required for next task
+- name: Authenticate for disk resize
+  ansible.builtin.uri:
+    url: "https://{{ pve_host }}:8006/api2/json/access/ticket"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ pve_user }}"
+      password: "{{ pve_password }}"
+    validate_certs: no
+  register: auth
+  delegate_to: localhost
+
+# Disk needs to be resize this way as the proxmox module will not allow updating of disk parameters. Size cannot go under 10gb since that is what the template is configured with and you cannot shrink
+- name: Resize disk
+  ansible.builtin.uri:
+    url: "https://{{ pve_host }}:8006/api2/json/nodes/{{ pve_node }}/qemu/{{ vm.vmid }}/resize"
+    method: PUT
+    headers:
+      Cookie: "PVEAuthCookie={{ auth.json.data.ticket }}"
+      CSRFPreventionToken: "{{ auth.json.data.CSRFPreventionToken }}"
+    body_format: form-urlencoded
+    body:
+      disk: virtio0
+      size: "{{ vm_virtio_size }}"
+    validate_certs: no
+  delegate_to: localhost
+
+- name: Start VM
+  community.general.proxmox_kvm:
+    api_user: "{{ pve_user }}"
+    api_password: "{{ pve_password }}"
+    api_host: "{{ pve_host }}"
+    name: "{{ vm_name }}"
+    node: "{{ pve_node }}"
+    state: started
+  delegate_to: localhost
