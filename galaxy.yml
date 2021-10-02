@@ -1,0 +1,9 @@
+namespace: "ntheule_lab"
+name: "general"
+version: "1.0"
+readme: "readme.md"
+authors:
+    - "Nathan Theule"
+dependencies:
+  community.general: "*"
+repository: "https://github.com/ntheule/lab.general"
